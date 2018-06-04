@@ -10,7 +10,7 @@ class Wheel(object):
         self.rubber_friction = 12.8 #pure
         self.radius = 0.34 #m
         self.mass = 35 # kg
-        self.crr = 12.8 # pure
+        self.crr = 0.035 # pure
         # if the wheel is connected to the engine
         self.drive = drive
         # whatever the wheel is spinning
