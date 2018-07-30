@@ -2,45 +2,52 @@ import numpy as np
 from math import degrees, radians
 from car import Car
 from matplotlib import pyplot as plt
+from matplotlib import gridspec
 
 car = Car()
 timestep = 1e-2
 
 # TODO NO SLIP RATIO FOR NOW
-wheel_speeds = []
-car_speeds = []
-engine_rpm = []
-engine_torques = []
-force_pos = []
-force_neg = []
-wheel_torques = []
-wheel_rpm = []
-gears = []
-rear_weight = []
-front_weight = []
-wheel_speeds_inertia = []
 
-steps = 18000
-
+steps = 5000
+mu_s = 0.7
+mu_k = 0.1
+car.thrust = 1
 for i in range(steps):
+    if i == 1000:
+        car.thrust = 0
     total_force = 0
     total_resistance_force = 0
     # get the current torque
     engine_torque = car.get_engine_torque()
+    car.vis_engine_torques.append(engine_torque)
     # iterate over the wheels to get the force on the car
     for wheel in car.wheels:
         if wheel.drive:
-            wheel_force = car.get_traction_force(engine_torque, wheel)
-            # todo handle spin
-            # the wheel could be spinning
-            # get the weight on the wheel
-            max_traction = wheel.get_max_traction(wheel.get_weight_on_wheel(car))
-            rear_weight.append(wheel.get_weight_on_wheel(car))
-            total_force += wheel_force
-        # apply rolling resistance
-        total_resistance_force += wheel.get_rolling_force(car.speed)
-        if not wheel.drive:
-            front_weight.append(wheel.get_weight_on_wheel(car))
+            torque = car.get_traction_torque(engine_torque)
+            torque -= wheel.get_rolling_force(car) * wheel.radius
+            # get max torque friction
+            max_torque_handle = car.get_weight_on_wheel() * mu_s * wheel.radius
+            total_resistance_force += wheel.get_rolling_force(car)
+            wheel.torque = torque
+
+            wheel.vis_torque.append(torque)
+
+            if torque <= max_torque_handle:
+                # all torque is transmitted
+                wheel.spinning = False
+                total_force += torque / wheel.radius
+            else:
+                # kinetic force
+                max_torque_handle = car.get_weight_on_wheel() * mu_k * wheel.radius
+                total_force += max_torque_handle / wheel.radius
+                wheel.spinning = True
+        else:
+            # TODO wheel lock on ice and other things
+            # TODO wheel is pushed and will rotate only if friction is high enough
+            wheel.vis_torque.append(0)
+            wheel.spinning = False
+
     # apply air resistance just one time
     total_resistance_force += car.get_air_resistance()
     # these forces can't move the car if it is still
@@ -49,41 +56,50 @@ for i in range(steps):
     car.acceleration = total_force / car.get_total_mass()
     # euler numeric integration
     car.speed += car.acceleration * timestep
-    # compute angular speed from the car speed
-    # todo slipping
+    # iterate again over wheels to get acc speed
     for wheel in car.wheels:
-        wheel.angular_speed = car.speed / wheel.radius
+        if not wheel.spinning:
+            # wheel is connected to the car
+            # if wheel speed is different from the correct one move toward it
+            angular_acc = (car.speed / wheel.radius - wheel.angular_speed) / (2)
+            # get car speed
+        else:
+            # wheel is not fully connected
+            max_torque_handle = car.get_weight_on_wheel() * mu_s * wheel.radius
+            angular_acc = car.acceleration / wheel.radius + (wheel.torque - max_torque_handle) / (wheel.get_inertia() *2)
+        wheel.angular_speed += angular_acc * timestep
+        # graph for rpm and spinning
+        wheel.vis_rpm.append(wheel.angular_speed * 60 / (2*np.pi))
+        wheel.vis_spinning.append(1 if wheel.spinning else 0)
 
-#        if not wheel.drive:
-#            wheel.angular_speed = car.speed / wheel.radius
-#        else:
-#            wheel.angular_speed += (car.get_traction_torque(engine_torque) / wheel.get_inertia()) * timestep
-    # now use one drive wheel to compute rpm
     drive_wheel = [w for w in car.wheels if w.drive][0]
     car.rpm = drive_wheel.angular_speed * car.gear_ratios[car.gear] * car.final_ratio * 60 / (2 * np.pi)
     # graphs
-    car_speeds.append(car.speed * 3.6)
-    wheel_speeds.append(drive_wheel.angular_speed)
-    engine_rpm.append(car.rpm)
-    engine_torques.append(engine_torque)
-    force_pos.append(total_force)
-    gears.append(car.gear)
-    force_neg.append(total_resistance_force)
-    wheel_rpm.append(wheel.angular_speed*60/(2*np.pi))
+    car.vis_speed.append(car.speed * 3.6)
+    car.vis_forces.append(total_force)
+    car.vis_res_forces.append(total_resistance_force)
+    car.vis_engine_rpm.append(car.rpm)
+    car.vis_gears.append(car.gear+1)
 
-fig, ax = plt.subplots(ncols=7)
-ax[0].plot(range(steps), car_speeds)
-ax[0].set_title('car_speed[Km/h]')
-ax[1].plot(range(steps), engine_rpm)
-ax[1].set_title('car_rpm')
-ax[2].plot(range(steps), wheel_rpm)
-ax[2].set_title('wheel_rpm')
-ax[3].plot(range(steps), engine_torques)
-ax[3].set_title('car_torque[N/m]')
-ax[4].plot(range(steps), force_pos)
-ax[4].set_title('total_forces[N]')
-ax[5].plot(range(steps), force_neg)
-ax[5].set_title('constrast_forces[N]')
-ax[6].plot(range(steps), gears)
-ax[6].set_title('current gear')
+ # PREPARE SUBPLOTS
+f = plt.figure()
+f.suptitle('CAR')
+els = [car.vis_speed, car.vis_gears, car.vis_engine_rpm, car.vis_forces, car.vis_res_forces, car.vis_engine_torques]
+names = ['speed', 'gear', 'engine_RPM', 'total force', 'resistance force', 'engine torque']
+gs = gridspec.GridSpec(1, len(els))
+for i, (el, name) in enumerate(zip(els, names)):
+    p = plt.subplot(gs[0, i])
+    p.set_title(name)
+    p.plot(range(steps), el)
+
+f_1 = plt.figure()
+f_1.suptitle('wheels')
+gs = gridspec.GridSpec(len(car.wheels), 3)
+for i, wheel in enumerate(car.wheels):
+    els = [wheel.vis_rpm, wheel.vis_spinning, wheel.vis_torque]
+    names = ['wheel_RPM', 'is_spinning', 'torque']
+    for j, (el, name) in enumerate(zip(els, names)):
+        p = plt.subplot(gs[i, j])
+        p.set_title(name)
+        p.plot(range(steps), el)
 plt.show()

@@ -13,11 +13,16 @@ class Wheel(object):
         self.crr = 0.035 # pure
         # if the wheel is connected to the engine
         self.drive = drive
+        self.torque = 0 # total torque on the wheel
         # whatever the wheel is spinning
         self.spinning = False
         # longitudinal distance from the cg of the car
         self.distance_cg =  distance_cg
         self.c_friction = 1.0 #pure
+
+        self.vis_torque = []
+        self.vis_spinning = []
+        self.vis_rpm = []
 
     def get_slip_ratio(self, longitudinal_speed):
         """
@@ -31,8 +36,8 @@ class Wheel(object):
     def get_inertia(self):
         return self.mass * self.radius**2 /2
 
-    def get_rolling_force(self, speed):
-        return speed * self.crr
+    def get_rolling_force(self, car):
+        return car.speed * self.crr
 
     def get_max_traction(self, weight):
         """

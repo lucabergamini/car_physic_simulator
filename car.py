@@ -36,14 +36,15 @@ class Car(object):
         ] #pure
         # curve for the rpm-torque relation in the engine
         self.engine_rpm_torque_curve_params = optimize.curve_fit(self.rpm_torque_function,
-                                                          (100, 2000, 3000, 4000, 5000, 6000),
-                                                          (190, 230, 240, 250, 210, 180),
+                                                          (0, 100, 2000, 3000, 4000, 5000, 6000),
+                                                          (10, 190, 230, 240, 250, 210, 180),
                                                        p0=[-1, 1, 150])[0]
         #self.wheel_slip_longitudinal_force_curve_params = optimize.curve_fit(self.slip_longitudinal_force_function,
         #                                               (-100.1, -20, -10, 0, 10, 20, 100.1),
         #                                               (0, -4000, -6000, 0, 6000, 4000, 0),
         #                                               p0=[6000, 1e-3])[0]
-        self.max_gear_rpm = 3500 #rev/min
+        self.max_gear_rpm = 5000 #rev/min
+        self.thrust =1
         self.wheels = [# rear
                        Wheel(self.wheelbase * 0.5, drive=True),
                        Wheel(self.wheelbase * 0.5, drive=True),
@@ -51,6 +52,12 @@ class Car(object):
                        Wheel(self.wheelbase * 0.5, drive=False),
                        Wheel(self.wheelbase * 0.5, drive=False),
                        ]
+        self.vis_speed = []
+        self.vis_forces = []
+        self.vis_res_forces = []
+        self.vis_gears = []
+        self.vis_engine_rpm = []
+        self.vis_engine_torques = []
 
     def get_engine_torque(self):
         """
@@ -76,7 +83,7 @@ class Car(object):
         :param wheel:
         :return:
         """
-        axel_torque = engine_torque * self.gear_ratios[self.gear] * self.final_ratio * self.efficiency
+        axel_torque = self.thrust * engine_torque * self.gear_ratios[self.gear] * self.final_ratio * self.efficiency
         return axel_torque / len([w for w in self.wheels if w.drive])
 
     def get_total_weight(self):
@@ -84,6 +91,9 @@ class Car(object):
 
     def get_total_mass(self):
         return self.mass + np.sum([w.mass for w in self.wheels])
+
+    def get_weight_on_wheel(self):
+        return self.get_total_mass() / len([w for w in self.wheels]) * 9.8
     #def get_slip_ratio(self, wheel:Wheel):
     #    """
     #    Get the current sleep ratio for the wheel
@@ -104,7 +114,8 @@ class Car(object):
     @rpm.setter
     def rpm(self, rpm):
         self._rpm = rpm
-        if self.rpm >= self.max_gear_rpm:
-            if self.gear + 1 < len(self.gear_ratios):
-                self.gear = self.gear + 1
+        if self._rpm >= self.max_gear_rpm:
+            self._rpm = self.max_gear_rpm
+            #if self.gear + 1 < len(self.gear_ratios):
+            #    self.gear = self.gear + 1
 
